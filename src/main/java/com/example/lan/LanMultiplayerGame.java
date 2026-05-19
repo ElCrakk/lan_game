@@ -56,6 +56,7 @@ public class LanMultiplayerGame {
     private static final int WORLD_WIDTH = 900;
     private static final int WORLD_HEIGHT = 600;
 
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new LanMultiplayerGame().showMenu());
     }
