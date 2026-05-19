@@ -11,8 +11,9 @@ A tiny Java Swing local multiplayer prototype. One computer hosts, other compute
 ## Play
 
 - On the host computer, click `Host Game`.
-- On another computer, run the same app, enter the host computer's local IP, and click `Join IP`.
+- On another computer, run the same app, click `Refresh List`, select the hosted game, and click `Join Selected`.
+- If the host does not appear, enter the host computer's local IP and click `Join IP`.
 - Move with `WASD` or arrow keys.
-- The game uses TCP port `5050`.
+- The game uses TCP port `5050` for gameplay and UDP port `5051` for LAN discovery.
 
-If joining fails, allow Java through the host computer's firewall and make sure both devices are on the same Wi-Fi network.
+If joining fails, allow Java through the host computer's firewall and make sure both devices are on the same Wi-Fi network. Some networks block UDP broadcast, so manual IP join is still available as a fallback.

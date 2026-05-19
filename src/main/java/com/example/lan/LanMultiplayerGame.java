@@ -1,10 +1,14 @@
 package com.example.lan;
 
 import javax.swing.JButton;
+import javax.swing.DefaultListModel;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.ListSelectionModel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -21,21 +25,34 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LanMultiplayerGame {
     private static final int PORT = 5050;
+    private static final int DISCOVERY_PORT = 5051;
+    private static final int CONNECT_TIMEOUT_MS = 2500;
     private static final int WORLD_WIDTH = 900;
     private static final int WORLD_HEIGHT = 600;
 
@@ -49,39 +66,93 @@ public class LanMultiplayerGame {
 
     private void showMenu() {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(420, 240));
+        frame.setMinimumSize(new Dimension(520, 430));
         frame.setLocationRelativeTo(null);
 
         JPanel panel = new JPanel(null);
         JLabel title = new JLabel("Swing LAN Multiplayer", JLabel.CENTER);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24));
-        title.setBounds(20, 20, 360, 36);
+        title.setBounds(20, 20, 460, 36);
 
         JButton hostButton = new JButton("Host Game");
-        hostButton.setBounds(40, 90, 150, 44);
+        hostButton.setBounds(35, 75, 145, 42);
+
+        JLabel listLabel = new JLabel("Hosted games on your LAN");
+        listLabel.setBounds(35, 135, 250, 22);
+
+        DefaultListModel<HostInfo> serverListModel = new DefaultListModel<>();
+        JList<HostInfo> serverList = new JList<>(serverListModel);
+        serverList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane serverScroll = new JScrollPane(serverList);
+        serverScroll.setBounds(35, 160, 445, 105);
+
+        JButton refreshButton = new JButton("Refresh List");
+        refreshButton.setBounds(35, 280, 145, 36);
+
+        JButton joinSelectedButton = new JButton("Join Selected");
+        joinSelectedButton.setBounds(190, 280, 145, 36);
 
         JTextField ipField = new JTextField("127.0.0.1");
-        ipField.setBounds(215, 90, 145, 44);
+        ipField.setBounds(190, 335, 145, 36);
 
         JButton joinButton = new JButton("Join IP");
-        joinButton.setBounds(215, 145, 145, 36);
+        joinButton.setBounds(345, 335, 135, 36);
 
-        JLabel hint = new JLabel("Host shares their local IP. Port: " + PORT, JLabel.CENTER);
-        hint.setBounds(20, 185, 360, 24);
+        JLabel manualLabel = new JLabel("Manual IP:");
+        manualLabel.setBounds(35, 335, 145, 36);
+
+        JLabel hint = new JLabel("No typing needed when a host appears in the list. TCP: " + PORT + "  UDP discovery: " + DISCOVERY_PORT, JLabel.CENTER);
+        hint.setBounds(20, 380, 480, 24);
 
         hostButton.addActionListener(event -> hostGame());
+        refreshButton.addActionListener(event -> refreshServerList(serverListModel));
+        joinSelectedButton.addActionListener(event -> {
+            HostInfo selected = serverList.getSelectedValue();
+            if (selected == null) {
+                showError("Select a hosted game first, or use Manual IP.");
+                return;
+            }
+            joinGame(selected.host());
+        });
         joinButton.addActionListener(event -> joinGame(ipField.getText().trim()));
 
         panel.add(title);
         panel.add(hostButton);
+        panel.add(listLabel);
+        panel.add(serverScroll);
+        panel.add(refreshButton);
+        panel.add(joinSelectedButton);
+        panel.add(manualLabel);
         panel.add(ipField);
         panel.add(joinButton);
         panel.add(hint);
 
         frame.setContentPane(panel);
         frame.pack();
-        frame.setSize(420, 260);
+        frame.setSize(520, 440);
         frame.setVisible(true);
+        refreshServerList(serverListModel);
+    }
+
+    private void refreshServerList(DefaultListModel<HostInfo> serverListModel) {
+        serverListModel.clear();
+        serverListModel.addElement(new HostInfo("Searching...", "", 0));
+
+        Thread refreshThread = new Thread(() -> {
+            List<HostInfo> hosts = DiscoveryClient.findHosts();
+            SwingUtilities.invokeLater(() -> {
+                serverListModel.clear();
+                if (hosts.isEmpty()) {
+                    serverListModel.addElement(new HostInfo("No hosted games found", "", 0));
+                    return;
+                }
+                for (HostInfo host : hosts) {
+                    serverListModel.addElement(host);
+                }
+            });
+        }, "server-list-refresh");
+        refreshThread.setDaemon(true);
+        refreshThread.start();
     }
 
     private void hostGame() {
@@ -190,6 +261,92 @@ public class LanMultiplayerGame {
     private record PlayerSnapshot(int id, int x, int y, Color color) {
     }
 
+    private record HostInfo(String name, String host, int players) {
+        @Override
+        public String toString() {
+            if (host.isBlank()) {
+                return name;
+            }
+            return name + "  (" + host + ")  -  " + players + " player" + (players == 1 ? "" : "s");
+        }
+    }
+
+    private static final class DiscoveryClient {
+        private static List<HostInfo> findHosts() {
+            Map<String, HostInfo> foundHosts = new LinkedHashMap<>();
+            byte[] request = "LAN_GAME_DISCOVER".getBytes(StandardCharsets.UTF_8);
+
+            try (DatagramSocket socket = new DatagramSocket()) {
+                socket.setBroadcast(true);
+                socket.setSoTimeout(350);
+
+                for (InetAddress address : broadcastAddresses()) {
+                    DatagramPacket packet = new DatagramPacket(request, request.length, address, DISCOVERY_PORT);
+                    socket.send(packet);
+                }
+
+                long deadline = System.currentTimeMillis() + 900;
+                while (System.currentTimeMillis() < deadline) {
+                    byte[] buffer = new byte[256];
+                    DatagramPacket response = new DatagramPacket(buffer, buffer.length);
+                    try {
+                        socket.receive(response);
+                    } catch (SocketTimeoutException exception) {
+                        continue;
+                    }
+
+                    HostInfo host = parseResponse(response);
+                    if (host != null) {
+                        foundHosts.put(host.host(), host);
+                    }
+                }
+            } catch (IOException ignored) {
+                // Some networks block UDP broadcast; manual IP join remains available.
+            }
+
+            return new ArrayList<>(foundHosts.values());
+        }
+
+        private static Set<InetAddress> broadcastAddresses() throws IOException {
+            Set<InetAddress> addresses = new HashSet<>();
+            addresses.add(InetAddress.getByName("255.255.255.255"));
+
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (!networkInterface.isUp() || networkInterface.isLoopback()) {
+                    continue;
+                }
+                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                    InetAddress broadcast = interfaceAddress.getBroadcast();
+                    if (broadcast != null) {
+                        addresses.add(broadcast);
+                    }
+                }
+            }
+            return addresses;
+        }
+
+        private static HostInfo parseResponse(DatagramPacket response) {
+            String message = new String(response.getData(), 0, response.getLength(), StandardCharsets.UTF_8);
+            String[] parts = message.split(" ", 4);
+            if (parts.length != 4 || !"LAN_GAME_HOST".equals(parts[0])) {
+                return null;
+            }
+
+            try {
+                int port = Integer.parseInt(parts[1]);
+                int players = Integer.parseInt(parts[2]);
+                if (port != PORT) {
+                    return null;
+                }
+                return new HostInfo(parts[3], response.getAddress().getHostAddress(), players);
+            } catch (NumberFormatException exception) {
+                return null;
+            }
+        }
+    }
+
     private static final class GameClient {
         private final Socket socket;
         private final BufferedReader in;
@@ -204,7 +361,8 @@ public class LanMultiplayerGame {
         private volatile String status = "Connecting...";
 
         private GameClient(String host, int port) throws IOException {
-            socket = new Socket(host, port);
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
         }
@@ -308,6 +466,7 @@ public class LanMultiplayerGame {
         private final AtomicInteger nextId = new AtomicInteger(1);
         private final Map<Integer, ServerPlayer> players = new ConcurrentHashMap<>();
         private final List<ClientHandler> clients = new CopyOnWriteArrayList<>();
+        private DatagramSocket discoverySocket;
         private volatile boolean running = true;
 
         private GameServer(int port) throws IOException {
@@ -322,6 +481,10 @@ public class LanMultiplayerGame {
             Thread gameThread = new Thread(this::gameLoop, "server-game-loop");
             gameThread.setDaemon(true);
             gameThread.start();
+
+            Thread discoveryThread = new Thread(this::discoveryLoop, "server-discovery");
+            discoveryThread.setDaemon(true);
+            discoveryThread.start();
         }
 
         private void acceptLoop() {
@@ -353,6 +516,35 @@ public class LanMultiplayerGame {
                 updatePlayers(deltaSeconds);
                 broadcastState();
                 sleep(16);
+            }
+        }
+
+        private void discoveryLoop() {
+            try (DatagramSocket socket = new DatagramSocket(DISCOVERY_PORT)) {
+                discoverySocket = socket;
+                byte[] buffer = new byte[256];
+                while (running) {
+                    DatagramPacket request = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(request);
+
+                    String message = new String(request.getData(), 0, request.getLength(), StandardCharsets.UTF_8);
+                    if (!"LAN_GAME_DISCOVER".equals(message)) {
+                        continue;
+                    }
+
+                    String responseText = "LAN_GAME_HOST " + PORT + " " + players.size() + " " + hostName();
+                    byte[] response = responseText.getBytes(StandardCharsets.UTF_8);
+                    DatagramPacket packet = new DatagramPacket(response, response.length, request.getAddress(), request.getPort());
+                    socket.send(packet);
+                }
+            } catch (SocketException exception) {
+                if (running) {
+                    System.err.println("Discovery unavailable on UDP port " + DISCOVERY_PORT + ": " + exception.getMessage());
+                }
+            } catch (IOException exception) {
+                if (running) {
+                    exception.printStackTrace();
+                }
             }
         }
 
@@ -403,6 +595,14 @@ public class LanMultiplayerGame {
         private void removeClient(int id, ClientHandler handler) {
             players.remove(id);
             clients.remove(handler);
+        }
+
+        private static String hostName() {
+            try {
+                return InetAddress.getLocalHost().getHostName();
+            } catch (IOException exception) {
+                return "LAN Host";
+            }
         }
 
         private static int clamp(int value, int min, int max) {
