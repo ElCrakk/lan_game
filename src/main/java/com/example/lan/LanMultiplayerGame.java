@@ -55,7 +55,7 @@ public class LanMultiplayerGame {
     private static final int PORT = 5050;
     private static final int DISCOVERY_PORT = 5051;
     private static final int CONNECT_TIMEOUT_MS = 2500;
-    private static final int WORLD_WIDTH = 900;
+    private static final int WORLD_WIDTH = 1000;
     private static final int WORLD_HEIGHT = 600;
     private static final int PLAYER_SIZE = 34;
     private static final int STARTING_LIVES = 5;
@@ -67,11 +67,11 @@ public class LanMultiplayerGame {
     private static final double FRICTION = 0.82;
     private static final double SHOOT_COOLDOWN_SECONDS = 0.42;
     private static final double BULLET_SPEED = 570.0;
-    private static final double BULLET_LIFETIME_SECONDS = 1.7;
+    private static final double BULLET_LIFETIME_SECONDS = 1.0;
     private static final double HIT_FLASH_SECONDS = 0.22;
     private static final double HIT_TEXT_SECONDS = 0.85;
     private static final double RESPAWN_SECONDS = 2.0;
-    private static final double CHEST_RESPAWN_SECONDS = 7.0;
+    private static final double CHEST_RESPAWN_SECONDS = 15.0;
     private static final ArenaMap[] MAPS = {
             new ArenaMap("Classic", new Rectangle[]{
                     new Rectangle(155, 485, 590, 26),
