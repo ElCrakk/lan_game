@@ -4,6 +4,7 @@ import javax.swing.JButton;
 import javax.swing.DefaultListModel;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JComboBox;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -61,23 +62,52 @@ public class LanMultiplayerGame {
     private static final int CHEST_SIZE = 24;
     private static final int DEFAULT_BULLET_DAMAGE = 14;
     private static final double MOVE_SPEED = 270.0;
-    private static final double JUMP_SPEED = 660.0;
+    private static final double JUMP_SPEED = 600.0;
     private static final double GRAVITY = 1450.0;
     private static final double FRICTION = 0.82;
-    private static final double SHOOT_COOLDOWN_SECONDS = 0.28;
-    private static final double BULLET_SPEED = 620.0;
+    private static final double SHOOT_COOLDOWN_SECONDS = 0.42;
+    private static final double BULLET_SPEED = 570.0;
     private static final double BULLET_LIFETIME_SECONDS = 1.7;
     private static final double HIT_FLASH_SECONDS = 0.22;
     private static final double HIT_TEXT_SECONDS = 0.85;
     private static final double RESPAWN_SECONDS = 2.0;
     private static final double CHEST_RESPAWN_SECONDS = 7.0;
-    private static final Rectangle[] PLATFORMS = {
-            new Rectangle(155, 485, 590, 26),
-            new Rectangle(80, 360, 220, 22),
-            new Rectangle(600, 360, 220, 22),
-            new Rectangle(340, 255, 220, 22),
-            new Rectangle(190, 170, 150, 18),
-            new Rectangle(560, 170, 150, 18)
+    private static final ArenaMap[] MAPS = {
+            new ArenaMap("Classic", new Rectangle[]{
+                    new Rectangle(155, 485, 590, 26),
+                    new Rectangle(80, 360, 220, 22),
+                    new Rectangle(600, 360, 220, 22),
+                    new Rectangle(340, 255, 220, 22),
+                    new Rectangle(190, 170, 150, 18),
+                    new Rectangle(560, 170, 150, 18)
+            }, new int[][]{
+                    {210, 455}, {655, 455}, {170, 330}, {690, 330}, {430, 225}, {240, 140}, {610, 140}
+            }),
+            new ArenaMap("Big Ruins", new Rectangle[]{
+                    new Rectangle(80, 515, 740, 26),
+                    new Rectangle(35, 405, 210, 22),
+                    new Rectangle(655, 405, 210, 22),
+                    new Rectangle(290, 380, 320, 22),
+                    new Rectangle(105, 285, 190, 20),
+                    new Rectangle(605, 285, 190, 20),
+                    new Rectangle(360, 220, 180, 18),
+                    new Rectangle(55, 150, 150, 18),
+                    new Rectangle(695, 150, 150, 18)
+            }, new int[][]{
+                    {160, 485}, {705, 485}, {410, 350}, {150, 255}, {710, 255}, {420, 190}, {105, 120}, {745, 120}
+            }),
+            new ArenaMap("Sky Bridges", new Rectangle[]{
+                    new Rectangle(120, 500, 230, 24),
+                    new Rectangle(550, 500, 230, 24),
+                    new Rectangle(335, 420, 230, 22),
+                    new Rectangle(110, 320, 170, 20),
+                    new Rectangle(620, 320, 170, 20),
+                    new Rectangle(355, 245, 190, 18),
+                    new Rectangle(205, 155, 140, 18),
+                    new Rectangle(555, 155, 140, 18)
+            }, new int[][]{
+                    {200, 470}, {650, 470}, {430, 390}, {165, 290}, {680, 290}, {435, 215}, {250, 125}, {600, 125}
+            })
     };
 
 
@@ -112,14 +142,20 @@ public class LanMultiplayerGame {
         JTextField nameField = new JTextField(defaultPlayerName());
         nameField.setBounds(245, 78, 235, 36);
 
+        JLabel mapLabel = new JLabel("Host map:");
+        mapLabel.setBounds(35, 122, 80, 24);
+
+        JComboBox<String> mapSelect = new JComboBox<>(mapNames());
+        mapSelect.setBounds(115, 122, 165, 28);
+
         JLabel listLabel = new JLabel("Hosted games on your LAN");
-        listLabel.setBounds(35, 135, 250, 22);
+        listLabel.setBounds(35, 155, 250, 22);
 
         DefaultListModel<HostInfo> serverListModel = new DefaultListModel<>();
         JList<HostInfo> serverList = new JList<>(serverListModel);
         serverList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane serverScroll = new JScrollPane(serverList);
-        serverScroll.setBounds(35, 160, 445, 105);
+        serverScroll.setBounds(35, 180, 445, 85);
 
         JButton refreshButton = new JButton("Refresh List");
         refreshButton.setBounds(35, 280, 145, 36);
@@ -139,7 +175,7 @@ public class LanMultiplayerGame {
         JLabel hint = new JLabel("Your LAN IP: " + localAddressSummary() + "  |  TCP: " + PORT + "  UDP: " + DISCOVERY_PORT, JLabel.CENTER);
         hint.setBounds(20, 380, 480, 24);
 
-        hostButton.addActionListener(event -> hostGame(nameField.getText()));
+        hostButton.addActionListener(event -> hostGame(nameField.getText(), mapSelect.getSelectedIndex()));
         refreshButton.addActionListener(event -> refreshServerList(serverListModel));
         joinSelectedButton.addActionListener(event -> {
             HostInfo selected = serverList.getSelectedValue();
@@ -162,12 +198,14 @@ public class LanMultiplayerGame {
             }
         });
         ipField.addActionListener(event -> joinGame(ipField.getText().trim(), nameField.getText()));
-        nameField.addActionListener(event -> hostGame(nameField.getText()));
+        nameField.addActionListener(event -> hostGame(nameField.getText(), mapSelect.getSelectedIndex()));
 
         panel.add(title);
         panel.add(hostButton);
         panel.add(nameLabel);
         panel.add(nameField);
+        panel.add(mapLabel);
+        panel.add(mapSelect);
         panel.add(listLabel);
         panel.add(serverScroll);
         panel.add(refreshButton);
@@ -207,9 +245,9 @@ public class LanMultiplayerGame {
         refreshThread.start();
     }
 
-    private void hostGame(String playerName) {
+    private void hostGame(String playerName, int mapIndex) {
         try {
-            server = new GameServer(PORT);
+            server = new GameServer(PORT, mapIndex);
             server.start();
             joinGame("127.0.0.1", playerName);
         } catch (IOException exception) {
@@ -225,7 +263,7 @@ public class LanMultiplayerGame {
 
         try {
             client = new GameClient(host, PORT, sanitizeName(playerName));
-            GamePanel gamePanel = new GamePanel(client);
+            GamePanel gamePanel = new GamePanel(client, this::leaveGame);
             frame.setContentPane(gamePanel);
             frame.setSize(WORLD_WIDTH, WORLD_HEIGHT);
             frame.setLocationRelativeTo(null);
@@ -237,6 +275,18 @@ public class LanMultiplayerGame {
         } catch (IOException exception) {
             showError("Could not connect to " + host + ":" + PORT + "\n" + exception.getMessage());
         }
+    }
+
+    private void leaveGame() {
+        if (client != null) {
+            client.close();
+            client = null;
+        }
+        if (server != null) {
+            server.stop();
+            server = null;
+        }
+        showMenu();
     }
 
     private void showError(String message) {
@@ -259,6 +309,21 @@ public class LanMultiplayerGame {
             return "Player";
         }
         return clean.length() > 16 ? clean.substring(0, 16) : clean;
+    }
+
+    private static String[] mapNames() {
+        String[] names = new String[MAPS.length];
+        for (int i = 0; i < MAPS.length; i++) {
+            names[i] = MAPS[i].name();
+        }
+        return names;
+    }
+
+    private static ArenaMap mapByIndex(int index) {
+        if (index < 0 || index >= MAPS.length) {
+            return MAPS[0];
+        }
+        return MAPS[index];
     }
 
     private static String localAddressSummary() {
@@ -290,22 +355,68 @@ public class LanMultiplayerGame {
 
     private static final class GamePanel extends JPanel {
         private final GameClient client;
+        private final Runnable leaveGame;
+        private final KeyBinds keyBinds = new KeyBinds();
+        private final JComboBox<String> mapSelect = new JComboBox<>(mapNames());
+        private int pendingMapIndex = -1;
+        private boolean syncingMapSelect;
+        private String pickupMessage = "";
+        private long pickupMessageUntil;
+        private String lastWeapon = "Pistol";
 
-        private GamePanel(GameClient client) {
+        private GamePanel(GameClient client, Runnable leaveGame) {
             this.client = client;
+            this.leaveGame = leaveGame;
             setLayout(null);
             setPreferredSize(new Dimension(WORLD_WIDTH, WORLD_HEIGHT));
             setBackground(new Color(19, 24, 36));
             setFocusable(true);
 
-            JButton addBotButton = new JButton("Add Bot");
-            addBotButton.setBounds(20, 66, 95, 28);
+            JButton addBotButton = new JButton("+ Bot");
+            addBotButton.setBounds(8, 8, 64, 22);
+            addBotButton.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
             addBotButton.setFocusable(false);
             addBotButton.addActionListener(event -> {
                 client.addBot();
                 requestFocusInWindow();
             });
             add(addBotButton);
+
+            JButton addDummyButton = new JButton("+ Dummy");
+            addDummyButton.setBounds(76, 8, 84, 22);
+            addDummyButton.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            addDummyButton.setFocusable(false);
+            addDummyButton.addActionListener(event -> {
+                client.addDummy();
+                requestFocusInWindow();
+            });
+            add(addDummyButton);
+
+            JButton settingsButton = new JButton("Settings");
+            settingsButton.setBounds(164, 8, 80, 22);
+            settingsButton.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            settingsButton.setFocusable(false);
+            settingsButton.addActionListener(event -> showSettingsDialog());
+            add(settingsButton);
+
+            mapSelect.setBounds(248, 8, 112, 22);
+            mapSelect.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            mapSelect.setFocusable(false);
+            mapSelect.addActionListener(event -> {
+                if (!syncingMapSelect && client.isHost()) {
+                    pendingMapIndex = mapSelect.getSelectedIndex();
+                    client.changeMap(pendingMapIndex);
+                }
+                requestFocusInWindow();
+            });
+            add(mapSelect);
+
+            JButton leaveButton = new JButton("Leave");
+            leaveButton.setBounds(364, 8, 66, 22);
+            leaveButton.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            leaveButton.setFocusable(false);
+            leaveButton.addActionListener(event -> leaveGame.run());
+            add(leaveButton);
 
             addKeyListener(new KeyAdapter() {
                 @Override
@@ -323,17 +434,50 @@ public class LanMultiplayerGame {
         }
 
         private void setKey(int keyCode, boolean pressed) {
-            if (keyCode == KeyEvent.VK_W || keyCode == KeyEvent.VK_UP) {
+            if (keyCode == keyBinds.jump || keyCode == KeyEvent.VK_UP) {
                 client.setInput("up", pressed);
-            } else if (keyCode == KeyEvent.VK_S || keyCode == KeyEvent.VK_DOWN) {
+            } else if (keyCode == keyBinds.down || keyCode == KeyEvent.VK_DOWN) {
                 client.setInput("down", pressed);
-            } else if (keyCode == KeyEvent.VK_A || keyCode == KeyEvent.VK_LEFT) {
+            } else if (keyCode == keyBinds.left || keyCode == KeyEvent.VK_LEFT) {
                 client.setInput("left", pressed);
-            } else if (keyCode == KeyEvent.VK_D || keyCode == KeyEvent.VK_RIGHT) {
+            } else if (keyCode == keyBinds.right || keyCode == KeyEvent.VK_RIGHT) {
                 client.setInput("right", pressed);
-            } else if (keyCode == KeyEvent.VK_SPACE || keyCode == KeyEvent.VK_J) {
+            } else if (keyCode == keyBinds.shoot || keyCode == KeyEvent.VK_J) {
                 client.setInput("attack", pressed);
             }
+        }
+
+        private void showSettingsDialog() {
+            JPanel panel = new JPanel(null);
+            panel.setPreferredSize(new Dimension(330, 210));
+            addBindButton(panel, "Left", keyBinds.left, 18, keyCode -> keyBinds.left = keyCode);
+            addBindButton(panel, "Right", keyBinds.right, 58, keyCode -> keyBinds.right = keyCode);
+            addBindButton(panel, "Jump", keyBinds.jump, 98, keyCode -> keyBinds.jump = keyCode);
+            addBindButton(panel, "Fast fall", keyBinds.down, 138, keyCode -> keyBinds.down = keyCode);
+            addBindButton(panel, "Shoot", keyBinds.shoot, 178, keyCode -> keyBinds.shoot = keyCode);
+            JOptionPane.showMessageDialog(this, panel, "Settings", JOptionPane.PLAIN_MESSAGE);
+            requestFocusInWindow();
+        }
+
+        private void addBindButton(JPanel panel, String label, int currentKey, int y, KeySetter setter) {
+            JLabel text = new JLabel(label);
+            text.setBounds(18, y, 100, 28);
+            JButton button = new JButton(KeyEvent.getKeyText(currentKey));
+            button.setBounds(125, y, 175, 28);
+            button.addActionListener(event -> {
+                button.setText("Press a key...");
+                button.requestFocusInWindow();
+                button.addKeyListener(new KeyAdapter() {
+                    @Override
+                    public void keyPressed(KeyEvent event) {
+                        setter.set(event.getKeyCode());
+                        button.setText(KeyEvent.getKeyText(event.getKeyCode()));
+                        button.removeKeyListener(this);
+                    }
+                });
+            });
+            panel.add(text);
+            panel.add(button);
         }
 
         @Override
@@ -354,8 +498,20 @@ public class LanMultiplayerGame {
                 g.drawLine(0, y, WORLD_WIDTH, y);
             }
 
+            if (pendingMapIndex == client.mapIndex()) {
+                pendingMapIndex = -1;
+            }
+            int shownMapIndex = pendingMapIndex >= 0 ? pendingMapIndex : client.mapIndex();
+            if (mapSelect.getSelectedIndex() != shownMapIndex) {
+                syncingMapSelect = true;
+                mapSelect.setSelectedIndex(shownMapIndex);
+                syncingMapSelect = false;
+            }
+            mapSelect.setEnabled(client.isHost());
+
+            ArenaMap arenaMap = mapByIndex(client.mapIndex());
             g.setColor(new Color(86, 94, 112));
-            for (Rectangle platform : PLATFORMS) {
+            for (Rectangle platform : arenaMap.platforms()) {
                 g.fillRoundRect(platform.x, platform.y, platform.width, platform.height, 8, 8);
                 g.setColor(new Color(119, 133, 157));
                 g.fillRoundRect(platform.x, platform.y, platform.width, 5, 8, 8);
@@ -380,6 +536,8 @@ public class LanMultiplayerGame {
             }
 
             Map<Integer, PlayerSnapshot> players = client.players();
+            PlayerSnapshot me = players.get(client.playerId());
+            updatePickupMessage(me);
             for (PlayerSnapshot player : players.values()) {
                 if (player.lives() <= 0) {
                     continue;
@@ -405,28 +563,37 @@ public class LanMultiplayerGame {
                     g.setColor(new Color(255, 255, 255, 185));
                     g.fillRoundRect(player.x() + 5, player.y() + 5, PLAYER_SIZE - 10, PLAYER_SIZE - 10, 6, 6);
                 }
-
-                g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-                g.drawString(player.name(), player.x() - 4, player.y() - 10);
-                if (player.hitTextSeconds() > 0) {
-                    float lift = (float) ((HIT_TEXT_SECONDS - player.hitTextSeconds()) * 32);
-                    g.setColor(new Color(255, 250, 150));
-                    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-                    String text = player.hitCombo() + " hit" + (player.hitCombo() == 1 ? "" : "s");
-                    int width = g.getFontMetrics().stringWidth(text);
-                    g.drawString(text, player.x() + PLAYER_SIZE / 2 - width / 2, (int) (player.y() - 22 - lift));
-                }
             }
 
-            g.setColor(new Color(230, 235, 245));
-            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-            g.drawString("Platform Mayhem  |  You are P" + client.playerId(), 20, 30);
-            g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-            PlayerSnapshot me = players.get(client.playerId());
-            String loadout = me == null ? "" : "   Weapon: " + me.weapon() + " " + (me.ammo() < 0 ? "inf" : me.ammo());
-            g.drawString("Move: A/D or arrows   Jump: W/Up   Shoot: Space or J" + loadout + "   " + client.status(), 20, 52);
             drawScoreboard(g, players);
-            drawRespawnOverlay(g, players.get(client.playerId()));
+            drawPickupMessage(g);
+        }
+
+        private void updatePickupMessage(PlayerSnapshot me) {
+            if (me == null) {
+                return;
+            }
+            if (!me.weapon().equals(lastWeapon)) {
+                lastWeapon = me.weapon();
+                if (!"Pistol".equals(me.weapon())) {
+                    pickupMessage = "Picked up " + me.weapon();
+                    pickupMessageUntil = System.currentTimeMillis() + 1800;
+                }
+            }
+        }
+
+        private void drawPickupMessage(Graphics2D g) {
+            if (pickupMessage.isBlank() || System.currentTimeMillis() > pickupMessageUntil) {
+                return;
+            }
+            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+            int width = g.getFontMetrics().stringWidth(pickupMessage);
+            int x = WORLD_WIDTH / 2 - width / 2;
+            int y = 72;
+            g.setColor(new Color(10, 13, 20, 170));
+            g.fillRoundRect(x - 14, y - 25, width + 28, 34, 8, 8);
+            g.setColor(new Color(255, 245, 170));
+            g.drawString(pickupMessage, x, y);
         }
 
         private void drawCharacter(Graphics2D g, PlayerSnapshot player) {
@@ -439,65 +606,66 @@ public class LanMultiplayerGame {
             int eyeX = face > 0 ? player.x() + 21 : player.x() + 10;
             g.fillOval(eyeX, player.y() + 7, 4, 4);
             g.setColor(new Color(30, 34, 44));
-            int gunX = face > 0 ? player.x() + 25 : player.x() - 12;
-            g.fillRoundRect(gunX, player.y() + 18, 22, 6, 4, 4);
+            int gunLength = gunLength(player.weapon());
+            int gunX = face > 0 ? player.x() + 25 : player.x() + 9 - gunLength;
+            g.fillRoundRect(gunX, player.y() + 18, gunLength, 6, 4, 4);
             g.setColor(Color.WHITE);
             g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
             g.drawString("P" + player.id(), player.x() + 8, player.y() + 31);
         }
 
+        private int gunLength(String weapon) {
+            return switch (weapon) {
+                case "Machine Gun" -> 30;
+                case "Sniper" -> 46;
+                default -> 20;
+            };
+        }
+
         private void drawSkyArrow(Graphics2D g, PlayerSnapshot player) {
             int x = Math.max(24, Math.min(WORLD_WIDTH - 24, player.x() + PLAYER_SIZE / 2));
-            int distance = Math.max(0, -player.y());
             g.setColor(player.color());
             int[] xs = {x, x - 12, x + 12};
             int[] ys = {12, 34, 34};
             g.fillPolygon(xs, ys, 3);
-            g.setColor(Color.WHITE);
-            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-            String text = distance + " px";
-            int width = g.getFontMetrics().stringWidth(text);
-            g.drawString(text, x - width / 2, 50);
         }
 
         private void drawScoreboard(Graphics2D g, Map<Integer, PlayerSnapshot> players) {
-            int x = WORLD_WIDTH - 235;
+            int x = WORLD_WIDTH - 190;
             int y = 20;
             g.setColor(new Color(10, 13, 20, 180));
-            g.fillRoundRect(x, y, 210, 28 + players.size() * 24, 8, 8);
+            g.fillRoundRect(x, y, 165, 26 + players.size() * 22, 8, 8);
             g.setColor(new Color(230, 235, 245));
             g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-            g.drawString("Scoreboard", x + 12, y + 19);
+            g.drawString("Players", x + 12, y + 18);
 
             List<PlayerSnapshot> sorted = new ArrayList<>(players.values());
             sorted.sort((a, b) -> Integer.compare(b.score(), a.score()));
             g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
             for (int i = 0; i < sorted.size(); i++) {
                 PlayerSnapshot player = sorted.get(i);
-                int rowY = y + 43 + i * 24;
+                int rowY = y + 39 + i * 22;
                 g.setColor(player.color());
                 g.fillRoundRect(x + 12, rowY - 11, 12, 12, 4, 4);
                 g.setColor(Color.WHITE);
-                String status = player.lives() <= 0
-                        ? " out"
-                        : player.respawnSeconds() > 0 ? " respawn " + Math.ceil(player.respawnSeconds()) + "s" : "";
-                g.drawString(player.name() + "  KOs " + player.score()
-                        + "  Lives " + player.lives() + "  " + player.weapon() + status, x + 32, rowY);
+                g.drawString(player.name() + "  " + player.score(), x + 32, rowY);
             }
         }
+    }
 
-        private void drawRespawnOverlay(Graphics2D g, PlayerSnapshot player) {
-            if (player == null || player.respawnSeconds() <= 0) {
-                return;
-            }
-            g.setColor(new Color(10, 13, 20, 185));
-            g.fillRoundRect(WORLD_WIDTH / 2 - 150, WORLD_HEIGHT / 2 - 38, 300, 76, 10, 10);
-            g.setColor(Color.WHITE);
-            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
-            String text = "Respawning in " + (int) Math.ceil(player.respawnSeconds()) + "s";
-            int width = g.getFontMetrics().stringWidth(text);
-            g.drawString(text, WORLD_WIDTH / 2 - width / 2, WORLD_HEIGHT / 2 + 7);
-        }
+    private interface KeySetter {
+        void set(int keyCode);
+    }
+
+    private static final class KeyBinds {
+        private int left = KeyEvent.VK_A;
+        private int right = KeyEvent.VK_D;
+        private int jump = KeyEvent.VK_W;
+        private int down = KeyEvent.VK_S;
+        private int shoot = KeyEvent.VK_SPACE;
+    }
+
+    private record ArenaMap(String name, Rectangle[] platforms, int[][] chestSpots) {
     }
 
     private record PlayerSnapshot(
@@ -620,6 +788,7 @@ public class LanMultiplayerGame {
         private final List<BulletSnapshot> bullets = new CopyOnWriteArrayList<>();
         private final List<ChestSnapshot> chests = new CopyOnWriteArrayList<>();
         private final Object inputLock = new Object();
+        private Timer inputTimer;
         private volatile int playerId = -1;
         private volatile boolean up;
         private volatile boolean down;
@@ -627,6 +796,7 @@ public class LanMultiplayerGame {
         private volatile boolean right;
         private volatile boolean attack;
         private volatile String status = "Connecting...";
+        private volatile int mapIndex;
 
         private GameClient(String host, int port, String playerName) throws IOException {
             socket = new Socket();
@@ -641,12 +811,31 @@ public class LanMultiplayerGame {
             reader.setDaemon(true);
             reader.start();
 
-            Timer inputTimer = new Timer(33, event -> sendInput());
+            inputTimer = new Timer(33, event -> sendInput());
             inputTimer.start();
         }
 
         private void addBot() {
             out.println("ADD_BOT");
+        }
+
+        private void addDummy() {
+            out.println("ADD_DUMMY");
+        }
+
+        private void changeMap(int index) {
+            out.println("MAP " + index);
+        }
+
+        private void close() {
+            if (inputTimer != null) {
+                inputTimer.stop();
+            }
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // Closing during leave is expected.
+            }
         }
 
         private void setInput(String direction, boolean pressed) {
@@ -703,10 +892,11 @@ public class LanMultiplayerGame {
             Map<Integer, PlayerSnapshot> nextPlayers = new LinkedHashMap<>();
             List<BulletSnapshot> nextBullets = new ArrayList<>();
             try {
-                String[] sections = body.split("\\|", 3);
+                String[] sections = body.split("\\|", 4);
                 String playerSection = sections.length > 0 ? sections[0] : "";
                 String bulletSection = sections.length > 1 ? sections[1] : "";
                 String chestSection = sections.length > 2 ? sections[2] : "";
+                String mapSection = sections.length > 3 ? sections[3] : "";
 
                 if (!playerSection.isBlank()) {
                     String[] entries = playerSection.split(";");
@@ -761,6 +951,12 @@ public class LanMultiplayerGame {
                 }
                 chests.clear();
                 chests.addAll(nextChests);
+                if (!mapSection.isBlank()) {
+                    int parsedMap = Integer.parseInt(mapSection);
+                    if (parsedMap >= 0 && parsedMap < MAPS.length) {
+                        mapIndex = parsedMap;
+                    }
+                }
             } catch (RuntimeException exception) {
                 status = "Ignored bad server state: " + exception.getMessage();
                 return;
@@ -796,6 +992,14 @@ public class LanMultiplayerGame {
         private List<ChestSnapshot> chests() {
             return new ArrayList<>(chests);
         }
+
+        private int mapIndex() {
+            return mapIndex;
+        }
+
+        private boolean isHost() {
+            return playerId == 1;
+        }
     }
 
     private static final class GameServer {
@@ -809,9 +1013,11 @@ public class LanMultiplayerGame {
         private double chestTimer;
         private DatagramSocket discoverySocket;
         private volatile boolean running = true;
+        private volatile int currentMapIndex;
 
-        private GameServer(int port) throws IOException {
+        private GameServer(int port, int mapIndex) throws IOException {
             serverSocket = new ServerSocket(port);
+            currentMapIndex = Math.max(0, Math.min(MAPS.length - 1, mapIndex));
         }
 
         private void start() {
@@ -833,7 +1039,7 @@ public class LanMultiplayerGame {
                 try {
                     Socket socket = serverSocket.accept();
                     int id = nextId.getAndIncrement();
-                    ServerPlayer player = new ServerPlayer(id, spawnX(id), spawnY(id), colorFor(id), false);
+                    ServerPlayer player = new ServerPlayer(id, spawnX(id), spawnY(id), colorFor(id), false, false);
                     players.put(id, player);
 
                     ClientHandler handler = new ClientHandler(socket, id, this);
@@ -849,9 +1055,51 @@ public class LanMultiplayerGame {
 
         private void addBot() {
             int id = nextId.getAndIncrement();
-            ServerPlayer bot = new ServerPlayer(id, spawnX(id), spawnY(id), colorFor(id), true);
+            ServerPlayer bot = new ServerPlayer(id, spawnX(id), spawnY(id), colorFor(id), true, false);
             bot.name = "Bot " + id;
             players.put(id, bot);
+        }
+
+        private void addDummy() {
+            int id = nextId.getAndIncrement();
+            ServerPlayer dummy = new ServerPlayer(id, spawnX(id), spawnY(id), new Color(180, 190, 205), false, true);
+            dummy.name = "Dummy " + id;
+            players.put(id, dummy);
+        }
+
+        private void changeMap(int requestedIndex, int requesterId) {
+            if (requesterId != 1 || requestedIndex < 0 || requestedIndex >= MAPS.length) {
+                return;
+            }
+            currentMapIndex = requestedIndex;
+            chests.clear();
+            chestTimer = 1.0;
+            for (ServerPlayer player : players.values()) {
+                player.x = spawnX(player.id);
+                player.y = spawnY(player.id);
+                player.vx = 0;
+                player.vy = 0;
+                player.grounded = false;
+            }
+        }
+
+        private void stop() {
+            running = false;
+            try {
+                serverSocket.close();
+            } catch (IOException ignored) {
+                // Closing while leaving is expected.
+            }
+            if (discoverySocket != null) {
+                discoverySocket.close();
+            }
+            for (ClientHandler client : clients) {
+                client.close();
+            }
+            clients.clear();
+            players.clear();
+            bullets.clear();
+            chests.clear();
         }
 
         private void gameLoop() {
@@ -902,6 +1150,13 @@ public class LanMultiplayerGame {
             for (ServerPlayer player : players.values()) {
                 if (player.bot) {
                     updateBot(player, deltaSeconds);
+                } else if (player.dummy) {
+                    player.up = false;
+                    player.down = false;
+                    player.left = false;
+                    player.right = false;
+                    player.attackHeld = false;
+                    player.attackQueued = false;
                 }
 
                 player.shootCooldown = Math.max(0, player.shootCooldown - deltaSeconds);
@@ -946,15 +1201,24 @@ public class LanMultiplayerGame {
                     player.vx *= FRICTION;
                 }
 
-                if (player.up && player.grounded) {
+                if (player.bot && player.up && !player.jumpHeld) {
+                    player.jumpQueued = true;
+                    player.jumpHeld = true;
+                } else if (player.bot && !player.up) {
+                    player.jumpHeld = false;
+                }
+
+                if (player.jumpQueued && player.jumpsRemaining > 0) {
+                    player.jumpQueued = false;
                     player.vy = -JUMP_SPEED;
                     player.grounded = false;
+                    player.jumpsRemaining--;
                 }
                 if (player.down && !player.grounded) {
                     player.vy += GRAVITY * 0.75 * deltaSeconds;
                 }
 
-                if (player.attackQueued && player.shootCooldown == 0) {
+                if ((player.attackQueued || (player.attackHeld && player.weapon == Weapon.MACHINE_GUN)) && player.shootCooldown == 0) {
                     player.attackQueued = false;
                     shoot(player);
                 }
@@ -974,13 +1238,14 @@ public class LanMultiplayerGame {
             if (bot.botThinkTimer > 0) {
                 return;
             }
-            bot.botThinkTimer = 0.12;
+            bot.botThinkTimer = 0.22;
 
             ServerPlayer target = nearestTarget(bot);
             bot.up = false;
             bot.down = false;
             bot.left = false;
             bot.right = false;
+            bot.attackQueued = false;
 
             if (target == null || bot.respawnTimer > 0) {
                 return;
@@ -993,48 +1258,83 @@ public class LanMultiplayerGame {
             double dx = targetCenterX - botCenterX;
             double dy = targetCenterY - botCenterY;
             double distance = Math.abs(dx) + Math.abs(dy);
-            double preferredDistance = 210 + (bot.id % 3) * 35;
-            boolean closeToLeftEdge = bot.x < 45;
-            boolean closeToRightEdge = bot.x > WORLD_WIDTH - PLAYER_SIZE - 45;
-            boolean targetIsLeft = dx < 0;
+            ServerChest desiredChest = bestChestFor(bot);
+            boolean wantsWeapon = desiredChest != null && (bot.weapon == Weapon.PISTOL || bot.ammo <= 2);
+            double goalX = wantsWeapon ? desiredChest.x : targetCenterX;
+            double goalY = wantsWeapon ? desiredChest.y : targetCenterY;
 
-            if (closeToLeftEdge) {
-                bot.right = true;
-            } else if (closeToRightEdge) {
-                bot.left = true;
-            } else if (Math.abs(dx) > preferredDistance + 35) {
-                bot.left = targetIsLeft;
-                bot.right = !targetIsLeft;
-            } else if (Math.abs(dx) < preferredDistance - 45 && Math.abs(dy) < 110) {
-                bot.left = !targetIsLeft;
-                bot.right = targetIsLeft;
-            } else if (Math.abs(dx) > 45 && Math.abs(dy) > 130) {
-                bot.left = targetIsLeft;
-                bot.right = !targetIsLeft;
+            if (wantsWeapon) {
+                moveBotToward(bot, goalX, goalY);
+            } else {
+                boolean targetIsLeft = dx < 0;
+                double preferredDistance = bot.weapon == Weapon.SNIPER ? 390 : bot.weapon == Weapon.MACHINE_GUN ? 260 : 175;
+                if (Math.abs(dx) > preferredDistance + 45) {
+                    moveBotHorizontally(bot, targetIsLeft ? -1 : 1);
+                } else if (Math.abs(dx) < preferredDistance - 55) {
+                    moveBotHorizontally(bot, targetIsLeft ? 1 : -1);
+                }
+                if (dy < -65 && bot.grounded) {
+                    bot.up = true;
+                } else if (dy > 120 && !bot.grounded) {
+                    bot.down = true;
+                }
             }
 
             if (nearPlatformEdge(bot) && bot.grounded) {
                 bot.up = true;
-                if (!closeToLeftEdge && !closeToRightEdge) {
-                    bot.left = !targetIsLeft;
-                    bot.right = targetIsLeft;
-                }
-            } else if (dy < -55 && bot.grounded) {
-                bot.up = true;
+                moveBotHorizontally(bot, bot.x < WORLD_WIDTH / 2.0 ? 1 : -1);
             }
 
-            if (distance <= 470 && Math.abs(dy) < 95 && hasClearShot(bot, target)) {
+            if (distance <= 560 && Math.abs(dy) < 105 && hasClearShot(bot, target)) {
                 bot.attackQueued = true;
                 bot.facingX = dx < 0 ? -1 : 1;
                 bot.facingY = 0;
             }
         }
 
+        private void moveBotToward(ServerPlayer bot, double goalX, double goalY) {
+            double centerX = bot.x + PLAYER_SIZE / 2.0;
+            double dx = goalX - centerX;
+            if (Math.abs(dx) > 24) {
+                moveBotHorizontally(bot, dx < 0 ? -1 : 1);
+            }
+            if (goalY + 20 < bot.y && bot.grounded) {
+                bot.up = true;
+            } else if (goalY > bot.y + 90 && !bot.grounded) {
+                bot.down = true;
+            }
+        }
+
+        private void moveBotHorizontally(ServerPlayer bot, int direction) {
+            if (direction < 0) {
+                bot.left = true;
+                bot.right = false;
+                bot.facingX = -1;
+            } else if (direction > 0) {
+                bot.left = false;
+                bot.right = true;
+                bot.facingX = 1;
+            }
+        }
+
+        private ServerChest bestChestFor(ServerPlayer bot) {
+            ServerChest best = null;
+            double bestScore = Double.MAX_VALUE;
+            for (ServerChest chest : chests.values()) {
+                double distance = Math.abs(chest.x - bot.x) + Math.abs(chest.y - bot.y);
+                if (distance < bestScore) {
+                    best = chest;
+                    bestScore = distance;
+                }
+            }
+            return best;
+        }
+
         private boolean hasClearShot(ServerPlayer bot, ServerPlayer target) {
             double y = bot.y + PLAYER_SIZE / 2.0;
             double minX = Math.min(bot.x, target.x);
             double maxX = Math.max(bot.x, target.x);
-            for (Rectangle platform : PLATFORMS) {
+            for (Rectangle platform : currentMap().platforms()) {
                 boolean crossesPlatform = y >= platform.y && y <= platform.y + platform.height
                         && maxX >= platform.x && minX <= platform.x + platform.width;
                 if (crossesPlatform) {
@@ -1047,7 +1347,7 @@ public class LanMultiplayerGame {
         private boolean nearPlatformEdge(ServerPlayer player) {
             int footX = (int) Math.round(player.x + PLAYER_SIZE / 2.0 + player.facingX * 28);
             int footY = (int) Math.round(player.y + PLAYER_SIZE + 8);
-            for (Rectangle platform : PLATFORMS) {
+            for (Rectangle platform : currentMap().platforms()) {
                 if (platform.contains(footX, footY)) {
                     return false;
                 }
@@ -1084,7 +1384,7 @@ public class LanMultiplayerGame {
             double bulletY = player.y + PLAYER_SIZE / 2.0 - 3;
             int bulletId = nextBulletId.getAndIncrement();
             bullets.put(bulletId, new ServerBullet(bulletId, player.id, bulletX, bulletY,
-                    direction * stats.bulletSpeed, 0, stats.life, player.color, stats.damage));
+                    direction * stats.bulletSpeed, 0, stats.life, player.color, stats.damage, stats.knockback));
             player.vx -= direction * stats.recoil;
             if (stats.ammoLimited) {
                 player.ammo--;
@@ -1120,9 +1420,9 @@ public class LanMultiplayerGame {
                         player.hitCombo++;
                         player.hitTextTimer = HIT_TEXT_SECONDS;
                         double direction = bullet.vx < 0 ? -1 : 1;
-                        double knockback = 170 + player.damage * 5.2;
+                        double knockback = bullet.knockback + player.damage * 4.6;
                         player.vx += direction * knockback;
-                        player.vy -= 180 + player.damage * 1.5;
+                        player.vy -= bullet.knockback * 0.28 + player.damage * 1.2;
                         player.grounded = false;
                         player.lastHitBy = bullet.ownerId;
                         player.hitFlashTimer = HIT_FLASH_SECONDS;
@@ -1147,13 +1447,14 @@ public class LanMultiplayerGame {
                 player.vx = Math.min(0, player.vx);
             }
 
-            for (Rectangle platform : PLATFORMS) {
+            for (Rectangle platform : currentMap().platforms()) {
                 boolean horizontallyInside = player.x + PLAYER_SIZE > platform.x && player.x < platform.x + platform.width;
                 boolean crossedTop = oldY + PLAYER_SIZE <= platform.y && player.y + PLAYER_SIZE >= platform.y;
                 if (horizontallyInside && crossedTop && player.vy >= 0) {
                     player.y = platform.y - PLAYER_SIZE;
                     player.vy = 0;
                     player.grounded = true;
+                    player.jumpsRemaining = 2;
                 }
             }
         }
@@ -1165,9 +1466,7 @@ public class LanMultiplayerGame {
             }
             chestTimer = CHEST_RESPAWN_SECONDS;
             int chestId = chests.size() + nextBulletId.getAndIncrement();
-            int[][] spots = {
-                    {210, 455}, {655, 455}, {170, 330}, {690, 330}, {430, 225}, {240, 140}, {610, 140}
-            };
+            int[][] spots = currentMap().chestSpots();
             int[] spot = spots[Math.abs(chestId) % spots.length];
             chests.put(chestId, new ServerChest(chestId, spot[0], spot[1]));
         }
@@ -1210,6 +1509,10 @@ public class LanMultiplayerGame {
                 player.y = -300;
                 player.respawnTimer = 0;
             }
+            player.jumpsRemaining = 2;
+            player.jumpQueued = false;
+            player.jumpHeld = false;
+            player.attackHeld = false;
         }
 
         private void respawn(ServerPlayer player) {
@@ -1221,11 +1524,15 @@ public class LanMultiplayerGame {
             player.vx = 0;
             player.vy = 90;
             player.grounded = false;
+            player.jumpsRemaining = 2;
             player.shootCooldown = 0;
             player.hitFlashTimer = 0;
             player.hitTextTimer = 0;
             player.hitCombo = 0;
             player.attackQueued = false;
+            player.attackHeld = false;
+            player.jumpQueued = false;
+            player.jumpHeld = false;
             player.lastHitBy = -1;
         }
 
@@ -1286,6 +1593,7 @@ public class LanMultiplayerGame {
                 }
                 builder.append(chest.x).append(',').append(chest.y);
             }
+            builder.append('|').append(currentMapIndex);
             String state = builder.toString();
             for (ClientHandler client : clients) {
                 client.send(state);
@@ -1313,6 +1621,10 @@ public class LanMultiplayerGame {
             } catch (IOException exception) {
                 return "LAN Host";
             }
+        }
+
+        private ArenaMap currentMap() {
+            return mapByIndex(currentMapIndex);
         }
 
         private static int clamp(int value, int min, int max) {
@@ -1344,6 +1656,7 @@ public class LanMultiplayerGame {
         private final int id;
         private final Color color;
         private final boolean bot;
+        private final boolean dummy;
         private volatile String name;
         private volatile double x;
         private volatile double y;
@@ -1362,6 +1675,9 @@ public class LanMultiplayerGame {
         private volatile boolean down;
         private volatile boolean left;
         private volatile boolean right;
+        private volatile boolean jumpHeld;
+        private volatile boolean jumpQueued;
+        private volatile int jumpsRemaining = 2;
         private volatile boolean attackHeld;
         private volatile boolean attackQueued;
         private volatile double shootCooldown;
@@ -1372,12 +1688,13 @@ public class LanMultiplayerGame {
         private volatile double botThinkTimer;
         private volatile int lastHitBy = -1;
 
-        private ServerPlayer(int id, int x, int y, Color color, boolean bot) {
+        private ServerPlayer(int id, int x, int y, Color color, boolean bot, boolean dummy) {
             this.id = id;
             this.x = x;
             this.y = y;
             this.color = color;
             this.bot = bot;
+            this.dummy = dummy;
             this.name = "Player " + id;
         }
     }
@@ -1394,15 +1711,15 @@ public class LanMultiplayerGame {
         }
     }
 
-    private record WeaponStats(double cooldown, double bulletSpeed, double life, int damage, double recoil, int ammo, boolean ammoLimited) {
+    private record WeaponStats(double cooldown, double bulletSpeed, double life, int damage, double recoil, double knockback, int ammo, boolean ammoLimited) {
     }
 
     private static WeaponStats statsFor(Weapon weapon) {
         return switch (weapon) {
-            case MACHINE_GUN -> new WeaponStats(0.08, 760.0, 1.4, 7, 35, 45, true);
-            case SNIPER -> new WeaponStats(0.82, 1040.0, 1.2, 38, 145, 8, true);
+            case MACHINE_GUN -> new WeaponStats(0.07, 790.0, 1.35, 6, 32, 255, 55, true);
+            case SNIPER -> new WeaponStats(1.05, 1120.0, 1.15, 42, 170, 1180, 7, true);
             case PISTOL -> new WeaponStats(SHOOT_COOLDOWN_SECONDS, BULLET_SPEED, BULLET_LIFETIME_SECONDS,
-                    DEFAULT_BULLET_DAMAGE, 75, -1, false);
+                    DEFAULT_BULLET_DAMAGE, 80, 285, -1, false);
         };
     }
 
@@ -1418,8 +1735,9 @@ public class LanMultiplayerGame {
         private double lastY;
         private double life;
         private int damage;
+        private double knockback;
 
-        private ServerBullet(int id, int ownerId, double x, double y, double vx, double vy, double life, Color color, int damage) {
+        private ServerBullet(int id, int ownerId, double x, double y, double vx, double vy, double life, Color color, int damage, double knockback) {
             this.id = id;
             this.ownerId = ownerId;
             this.x = x;
@@ -1431,6 +1749,7 @@ public class LanMultiplayerGame {
             this.life = life;
             this.color = color;
             this.damage = damage;
+            this.knockback = knockback;
         }
     }
 
@@ -1485,6 +1804,20 @@ public class LanMultiplayerGame {
                 return;
             }
 
+            if ("ADD_DUMMY".equals(line)) {
+                server.addDummy();
+                return;
+            }
+
+            if (line.startsWith("MAP ")) {
+                try {
+                    server.changeMap(Integer.parseInt(line.substring("MAP ".length()).trim()), playerId);
+                } catch (NumberFormatException ignored) {
+                    // Ignore malformed map requests.
+                }
+                return;
+            }
+
             if (line.startsWith("NAME ")) {
                 ServerPlayer player = server.players.get(playerId);
                 if (player != null) {
@@ -1511,6 +1844,10 @@ public class LanMultiplayerGame {
             player.down = Boolean.parseBoolean(parts[2]);
             player.left = Boolean.parseBoolean(parts[3]);
             player.right = Boolean.parseBoolean(parts[4]);
+            if (player.up && !player.jumpHeld) {
+                player.jumpQueued = true;
+            }
+            player.jumpHeld = player.up;
             boolean attack = Boolean.parseBoolean(parts[5]);
             if (attack && !player.attackHeld) {
                 player.attackQueued = true;
@@ -1520,6 +1857,14 @@ public class LanMultiplayerGame {
 
         private void send(String message) {
             out.println(message);
+        }
+
+        private void close() {
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // Closing during shutdown is expected.
+            }
         }
     }
 }
