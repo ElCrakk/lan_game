@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="is-it-possible-to-create-a:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/is_it_possible_to_create_a_jar</output-path>
+    <root id="archive" name="is-it-possible-to-create-a.jar">
+      <element id="module-output" name="is-it-possible-to-create-a" />
+    </root>
+  </artifact>
+</component>
